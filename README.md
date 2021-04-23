@@ -30,6 +30,12 @@ This tracker was tested on a Windows 10 machine with a NVIDIA GTX 1070 graphics 
 
 See below for installation instructions for the new VOT python toolkit for testing with D3S. These are modified from the linked [VOT Toolkit Installation](https://votchallenge.net/howto/tutorial_python.html) instructions. See the [VOT evaluation toolkit](https://github.com/votchallenge/toolkit) on GitHub for the code behind the toolkit. Also, refer to the [Tracker Integration Examples](https://github.com/votchallenge/integration) on GitHub for more details on how the tracker was integrated. The pytracking/vot.py file was updated with the latest version in the "Tracker Integration Examples" GitHub repo at the time of writing this.
 
+**Note**: To install this toolkit, you will need a C++ compiler. For example, you could install the C++ build tools with Visual Studio at the link below:
+
+[Visual Studio with C++](https://visualstudio.microsoft.com/vs/features/cplusplus/)
+
+Install the VOT Python Toolkit with the command below:
+
 ```bash
 pip install git+https://github.com/votchallenge/vot-toolkit-python
 ```
@@ -47,11 +53,18 @@ pip install numpy
 
 ### Creating a workspace
 
-This will create a workspace folder and download the VOT2018 dataset sequences into it. This utilizes the VOT toolkit installed earlier and will set up the folder structure to be compatible with the toolkit for evaluation. Note that this assumes you are at the directory level of D3S's parent folder.
+This will create a workspace folder and download the VOT2018 or VOT2020 dataset sequences into it. This utilizes the VOT toolkit installed earlier and will set up the folder structure to be compatible with the toolkit for evaluation. Note that this assumes you are at the directory level of D3S's parent folder. See details on the VOT2020 dataset [here](https://www.votchallenge.net/vot2020/dataset.html).
 
 ```bash
 mkdir vot-2018
 vot initialize vot2018 --workspace vot-2018
+```
+
+Or,
+
+```bash
+mkdir vot-2020
+vot initialize vot2020 --workspace vot-2020
 ```
 
 See the folder structure below:
@@ -60,9 +73,17 @@ See the folder structure below:
 -D3S
     -ltr
     -pytracking
+    ...
 -vot-2018
     -results
     -sequences
+    -trackers.ini
+    ...
+-vot-2020
+    -results
+    -sequences
+    -trackers.ini
+    ...
 ```
 
 ### Specifying paths for D3S
@@ -70,7 +91,7 @@ See the folder structure below:
 See below for instructions on setting up paths for D3S. Note that on Windows, any backslash `\` in the paths should be escaped with `\\` for the path to work.
 
 1.) Specify the path to the D3S [pre-trained segmentation network](http://data.vicos.si/alanl/d3s/SegmNet.pth.tar) by setting the `params.segm_net_path` in the `pytracking/parameters/segm/default_params.py`. <br/>
-2.) Specify the path to the VOT 2018 dataset "sequences" folder by setting the `vot18_path` in the `pytracking/evaluation/local.py`. <br/>
+2.) Specify the path to the VOT 2018 dataset "sequences" folder by setting the `vot18_path` in the `pytracking/evaluation/local.py`. (This is not needed if using the VOT Python Toolkit for evaluation) <br/>
 3.) Activate the conda environment
 
 ```bash
@@ -79,7 +100,9 @@ conda activate d3s
 
 ### Setting up the trackers.ini
 
-Refer to the [VOT Toolkit Installation](https://votchallenge.net/howto/tutorial_python.html) instructions for more details on how to setup the trackers.ini. This file is located in the vot-2018 folder created in the last step. Note that the paths variable here should point to the folder containing the vot_wrapper.py file, assuming that the user is in the vot-2018 directory created earlier.
+Refer to the [VOT Toolkit Installation](https://votchallenge.net/howto/tutorial_python.html) instructions for more details on how to setup the trackers.ini. This file is located in the vot workspace folder created in the last step. Note that the paths variable here should point to the folder containing the vot_wrapper.py and vot2020wrappper.py files, assuming that the user is in the vot workspace directory created earlier.
+
+See below for an example trackers.ini for testing on VOT2018.
 
 ```ini
 [D3SPython]  # <tracker-name>
@@ -95,12 +118,14 @@ paths = ../D3S/pytracking
 # env_PATH = <additional-env-paths>;${PATH}
 ```
 
+For testing on VOT2020, replace `vot_wrapper` with `vot2020wrapper`, otherwise the trackers.ini is the same.
+
 ### Testing the tracker
 
 The `vot test` command below can be used to verify the tracker has integrated properly with the VOT toolkit and that there aren't any errors during execution.
 
 ```bash
-cd vot-2018
+cd vot-2020
 vot test D3SPython
 ```
 

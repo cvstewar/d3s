@@ -961,6 +961,8 @@ class Segm(BaseTracker):
         if self.params.save_mask:
             mask_real = copy.copy(mask)
         mask = (mask > self.params.segm_mask_thr).astype(np.uint8)
+        if self.params.return_mask:
+            mask_copy = copy.copy(mask)
 
         if cv2.__version__[-5] == '4':
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -977,6 +979,10 @@ class Segm(BaseTracker):
             if self.params.save_mask:
                 save_mask(None, mask_real, segm_crop_sz, bb, image.shape[1], image.shape[0],
                           self.params.masks_save_path, self.sequence_name, self.frame_name)
+
+            if self.params.return_mask:
+                self.result_mask = self.create_result_mask(None, mask_copy, segm_crop_sz, bb, 
+                    image.shape[1], image.shape[0])
 
         if len(cnt_area) > 0 and len(contours) != 0 and np.max(cnt_area) > 50:  # 1000:
             contour = contours[np.argmax(cnt_area)]  # use max area polygon
@@ -1075,3 +1081,61 @@ class Segm(BaseTracker):
         w = s * (x2 - x1) + 1
         h = s * (y2 - y1) + 1
         return np.array([cx - w / 2, cy - h / 2, w, h])
+
+    def create_result_mask(self, mask, mask_real, segm_crop_sz, bb, img_w, img_h):
+        # This performs the same function as pytracking.mask_to_disk.save_mask, but
+        # will return the resulting mask as a numpy array instead of saving directly
+        # to a disk.
+        if mask is not None:
+            M_sel = cv2.dilate(mask, np.ones((7, 7), np.uint8), iterations=1)
+            mask_resized = (cv2.resize((M_sel * mask_real).astype(np.float32), (segm_crop_sz, segm_crop_sz),
+                                    interpolation=cv2.INTER_LINEAR) > 0.5).astype(np.uint8)
+        else:
+            mask_resized = (cv2.resize(mask_real.astype(np.float32), (segm_crop_sz, segm_crop_sz),
+                                    interpolation=cv2.INTER_LINEAR) > 0.5).astype(np.uint8)
+        image_mask = np.zeros((img_h, img_w), dtype=np.uint8)
+        # patch coordinates
+        xp0 = 0
+        yp0 = 0
+        xp1 = mask_resized.shape[0]
+        yp1 = mask_resized.shape[1]
+        # image coordinates
+        xi0 = int(round((bb[0] + bb[2] / 2) - mask_resized.shape[1] / 2))
+        yi0 = int(round((bb[1] + bb[3] / 2) - mask_resized.shape[0] / 2))
+        xi1 = int(round(xi0 + mask_resized.shape[1]))
+        yi1 = int(round(yi0 + mask_resized.shape[0]))
+        if xi0 < 0:
+            xp0 = -1 * xi0
+            xi0 = 0
+        if xi0 > img_w:
+            xp0 = (mask_resized.shape[1]) - (xi0 - img_w)
+            xi0 = img_w
+        if yi0 < 0:
+            yp0 = -1 * yi0
+            yi0 = 0
+        if yi0 > img_h:
+            yp0 = (mask_resized.shape[0]) - (yi0 - img_h)
+            yi0 = img_h
+        if xi1 < 0:
+            xp1 = -1 * xi1
+            xi1 = 0
+        if xi1 > img_w:
+            xp1 = (mask_resized.shape[1]) - (xi1 - img_w)
+            xi1 = img_w
+        if yi1 < 0:
+            yp1 = -1 * yi1
+            yi1 = 0
+        if yi1 > img_h:
+            yp1 = (mask_resized.shape[0]) - (yi1 - img_h)
+            yi1 = img_h
+
+        image_mask[yi0:yi1, xi0:xi1] = mask_resized[yp0:yp1, xp0:xp1]
+
+        return image_mask
+
+    def get_result_mask(self):
+        # This is used to retrieve the mask for VOT2020 testing
+        if self.params.return_mask:
+            return self.result_mask
+        else:
+            return None

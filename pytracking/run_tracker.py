@@ -12,6 +12,7 @@ from pytracking.evaluation.uavdataset import UAVDataset
 from pytracking.evaluation.tpldataset import TPLDataset
 from pytracking.evaluation.votdataset import VOTDataset
 from pytracking.evaluation.vot18dataset import VOT18Dataset
+from pytracking.evaluation.vot20dataset import VOT20Dataset
 from pytracking.evaluation.lasotdataset import LaSOTDataset
 from pytracking.evaluation.trackingnetdataset import TrackingNetDataset
 from pytracking.evaluation.got10kdataset import GOT10KDatasetTest, GOT10KDatasetVal, GOT10KDatasetLTRVal
@@ -42,6 +43,8 @@ def run_tracker(tracker_name, tracker_param, run_id=None, dataset_name='otb', se
         dataset = VOTDataset()
     elif dataset_name == 'vot18':
         dataset = VOT18Dataset()
+    elif dataset_name == 'vot20':
+        dataset = VOT20Dataset()
     elif dataset_name == 'otb_vot':
         dataset = OTB100Dataset()
     elif dataset_name == 'tn':

@@ -26,11 +26,13 @@ def rect_to_poly(rect):
     return [x0, y0, x1, y1, x2, y2, x3, y3]
 
 def parse_sequence_name(image_path):
-    idx = image_path.find('/color/')
-    return image_path[idx - image_path[:idx][::-1].find('/'):idx], idx
+    tmp_path = image_path.replace('\\','/') 
+    idx = tmp_path.find('/color/')
+    return tmp_path[idx - tmp_path[:idx][::-1].find('/'):idx], idx
 
 def parse_frame_name(image_path, idx):
-    frame_name = image_path[idx + len('/color/'):]
+    tmp_path = image_path.replace('\\','/') 
+    frame_name = tmp_path[idx + len('/color/'):]
     return frame_name[:frame_name.find('.')]
 
 # MAIN

@@ -129,4 +129,7 @@ def parameters():
     if params.masks_save_path != '':
         params.save_mask = True
 
+    # This will enable retrieving the mask for VOT2020
+    params.return_mask = False
+
     return params
