@@ -49,7 +49,13 @@ class BaseTracker:
             state = self.track(image)
             times.append(time.time() - start_time)
 
-            tracked_bb.append(state)
+            if len(state) != len(sequence.init_state):
+                # Note that the tracker may return a state of length 4 instead of 8 if 
+                # using a rotated bounding box and the target wasn't found. In this case,
+                # reuse the prediction from the last frame
+                tracked_bb.append(tracked_bb[-1])
+            else:
+                tracked_bb.append(state)
 
             if self.params.visualization:
                 self.visualize(image, state)

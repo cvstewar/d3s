@@ -5,6 +5,11 @@ import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+# Add pytracking package to system path to enable loading of dependencies
+env_path = os.path.join(os.path.dirname(__file__), '..')
+if env_path not in sys.path:
+    sys.path.append(env_path)
+
 from pytracking.tracker.segm import Segm
 from pytracking.parameter.segm import default_params as vot_params
 

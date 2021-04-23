@@ -4,34 +4,41 @@ set argC=0
 for %%x in (%*) do Set /A argC+=1
 
 if %argC% NEQ 2 (
-	echo "ERROR! Illegal number of parameters (%argC%) Usage: install.bat conda_install_path" environment_name
+	echo "ERROR! Illegal number of parameters (%argC%) Usage: install.bat conda_install_path environment_name"
     goto:eof
 )
 
+rem conda_install_path=C:\ProgramData\Anaconda3
 set conda_install_path=%1
 set conda_env_name=%2
 
 echo Conda install path: %conda_install_path%
 
-set PATH=%conda_install_path%\condabin;%PATH%
+rem set PATH=%conda_install_path%\condabin;%PATH%
 
 echo ****************** Creating conda environment %conda_env_name% python=3.7 ******************
-call conda create -y --name %conda_env_name%
+rem call conda create -y --name %conda_env_name% python=3.7
+
+rem The below line ensures that the environment is installed in a Windows user directory and not under C:\ProgramData
+call conda create -y --prefix %userprofile%\.conda\envs\%conda_env_name% python=3.7
 
 echo.
 echo.
 echo ****************** Activating conda environment %conda_env_name% ******************
-call activate %conda_env_name%
+rem call activate %conda_env_name%
+call activate %userprofile%\.conda\envs\%conda_env_name%
 
 echo.
 echo.
 echo ****************** Installing pytorch with cuda9 ******************
-call conda install -y pytorch torchvision cudatoolkit=9.0 -c pytorch 
+rem call conda install -y pytorch torchvision cudatoolkit=9.0 -c pytorch 
+call conda install -y pytorch==1.1.0 torchvision==0.3.0 cudatoolkit=9.0 -c pytorch
 
 echo.
 echo.
 echo ****************** Installing matplotlib 2.2.2 ******************
-call conda install -y matplotlib=2.2.2
+rem call conda install -y matplotlib=2.2.2
+call conda install -y matplotlib
 
 echo.
 echo.
