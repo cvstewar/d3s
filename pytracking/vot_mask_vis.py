@@ -1,9 +1,10 @@
 """
 This file is intended to produce annotated images and videos from the output of 
 the VOT python toolkit evaluation. This will annotate the sequence images with
-the predicted masks or bounding boxes. It will also annotate the images with the 
+the predicted masks or bounding boxes. It can also annotate the images with the 
 sequence and tracker information and a legend and will then produce a .mp4 video 
-from the image frames for all 60 sequences.
+from the image frames for all 60 sequences. By default, the annotation text is
+disabled.
 
 Expected Folder Structure:
 -D3S
@@ -16,6 +17,9 @@ Expected Folder Structure:
         -DS3Python
             -Baseline
             -visualization (Where output will be saved)
+
+This is adapted from a visualization script made for Assignment 2 of SYDE 673
+by Curtis Stewart.
 """
 
 # Import dependencies
@@ -35,11 +39,12 @@ from statistics import mean
 
 def main():
     parser = argparse.ArgumentParser(description='Produce VOT visualization')
-    parser.add_argument('--dataset', type=str, default='vot-2020', help='Name of dataset folder.')
+    parser.add_argument('--dataset', type=str, default='vot-2020', help='Name of dataset folder. vot-2020 or vot-2018')
     parser.add_argument('--tracker', type=str, default='D3SPython', help='Name of result folder.')
     parser.add_argument('--output', type=str, default='Visualization', help='Name of output folder.')
     parser.add_argument('--mode', type=str, default='mask', help='bbox or mask')
-    parser.add_argument('--annotate', type=int, default=0, help='Annotation level: 0,1,2')
+    parser.add_argument('--annotate', type=int, default=0, help='Annotation level: ' + 
+        '0 - tracking prediction, 1 - with legend, 2 - with seq info')
 
     args = parser.parse_args()
 
@@ -110,7 +115,13 @@ def main():
         gt_file = os.path.join(data_path,'sequences',seq,'groundtruth.txt')
         gt_reader = open(gt_file,'r')
         gt_line = gt_reader.readline()
-        gt_bbox = gt_line[1:].split(',')[:4]
+        if len(gt_line) > 0 and gt_line[0] == 'm':
+            gt_state = gt_line[1:].split(',')
+        else:
+            gt_state = gt_line.split(',')
+
+        if len(gt_state) != 4 and len(gt_state) != 8:
+            gt_state = gt_state[:4]
 
         if len(gt_line[1:].split(',')) > 5:
             gt_raw_mask = gt_line[1:].split(',')
@@ -118,13 +129,20 @@ def main():
             gt_raw_mask = None
 
         # Load result bbox output file
-        result_file = os.path.join(result_folder,seq,seq + '_00000000.txt')
+        if args.dataset == "vot-2020":
+            result_file = os.path.join(result_folder,seq,seq + '_00000000.txt')
+        elif args.dataset == "vot-2018":
+            result_file = os.path.join(result_folder,seq,seq + '_001.txt')
+        else:
+            result_file = os.path.join(result_folder,seq,seq + '_00000000.txt')
         result_reader = open(result_file,'r')
         line = result_reader.readline()
         if len(line) > 0 and line[0] == 'm':
-            bbox = line[1:].split(',')[:4]
+            state = line[1:].split(',')
         else:
-            bbox = line.split(',')
+            state = line.split(',')
+        if len(state) != 4 and len(state) != 8:
+            state = state[:4]
 
         if len(line) > 0 and len(line[1:].split(',')) > 5:
             pred_raw_mask = line[1:].split(',')
@@ -132,7 +150,12 @@ def main():
             pred_raw_mask = None
 
         # Load time output file
-        time_file = os.path.join(result_folder,seq,seq + '_00000000_time.value')
+        if args.dataset == "vot-2020":
+            time_file = os.path.join(result_folder,seq,seq + '_00000000_time.value')
+        elif args.dataset == "vot-2018":
+            time_file = os.path.join(result_folder,seq,seq + '_001_time.value')
+        else:
+            time_file = os.path.join(result_folder,seq,seq + '_00000000_time.value')
         time_reader = open(time_file,'r')
         ftime = float(time_reader.readline())
 
@@ -153,22 +176,32 @@ def main():
                 mask_color = (0, 255, 0) # BGR format
                 frame = add_raw_mask(frame, gt_raw_mask,frame.shape[1],frame.shape[0],mask_color)
 
-            if add_gt_bbox and len(gt_bbox) == 4:
+            if add_gt_bbox and len(gt_state) == 4:
                 # Plot gt bbox as green rectangle
-                (x, y, w, h) = [int(float(v)) for v in gt_bbox]
+                (x, y, w, h) = [int(float(v)) for v in gt_state]
                 if w > 0 and h > 0:
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            elif add_gt_bbox and len(gt_state) == 8:
+                # Plot gt polygon as green rectangle
+                gt_state = list(map(float, gt_state)) # convert str to float
+                pts = np.array(gt_state, dtype=np.int32).reshape((-1,1,2))
+                cv2.polylines(frame,[pts],True,(0, 255, 0), 2)
 
             if add_pred_mask and pred_raw_mask is not None:
                 # Add prediction mask as yellow mask
                 mask_color = (0, 255, 255) # BGR format
                 frame = add_raw_mask(frame, pred_raw_mask,frame.shape[1],frame.shape[0],mask_color)
 
-            if add_pred_bbox and len(bbox) == 4:
+            if add_pred_bbox and len(state) == 4:
                 # Plot tracker bbox as red rectangle
-                (x, y, w, h) = [int(float(v)) for v in bbox]
+                (x, y, w, h) = [int(float(v)) for v in state]
                 if w > 0 and h > 0:
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            elif add_pred_bbox and len(state) == 8:
+                # Plot tracker polygon as red rectangle
+                state = list(map(float, state)) # convert str to float
+                pts = np.array(state, dtype=np.int32).reshape((-1,1,2))
+                cv2.polylines(frame,[pts],True,(0, 0, 255), 2)
 
             # Calculate fps from frame time
             if ftime != 0:
@@ -180,7 +213,13 @@ def main():
 
             if args.annotate > 1:
                 # Add text annotations
-                info = [f"Sequence: VOT2020/{seq}",
+                if args.dataset == "vot-2020":
+                    data_name = "VOT2020"
+                elif args.dataset == "vot-2018":
+                    data_name = "VOT2018"
+                else:
+                    data_name = args.dataset
+                info = [f"Sequence: {data_name}/{seq}",
                         f"Tracker: {args.tracker}",
                         f"Tracker FPS: {fps}"]
 
@@ -260,9 +299,11 @@ def main():
             line = result_reader.readline()
             # tracker bbox
             if len(line) > 0 and line[0] == 'm':
-                bbox = line[1:].split(',')[:4]
+                state = line[1:].split(',')
             else:
-                bbox = line.split(',')
+                state = line.split(',')
+            if len(state) != 4 and len(state) != 8:
+                state = state[:4]
             # tracker mask
             if len(line) > 0 and len(line[1:].split(',')) > 5:
                 pred_raw_mask = line[1:].split(',')
@@ -270,13 +311,18 @@ def main():
                 pred_raw_mask = None
             # Ground truth data
             gt_line = gt_reader.readline()
-            gt_bbox = gt_line[1:].split(',')[:4] # gt bbox
+            if len(gt_line) > 0 and gt_line[0] == 'm':
+                gt_state = gt_line[1:].split(',')
+            else:
+                gt_state = gt_line.split(',')
+            if len(gt_state) != 4 and len(gt_state) != 8:
+                gt_state = gt_state[:4]
             if len(gt_line[1:].split(',')) > 5:
                 gt_raw_mask = gt_line[1:].split(',')
             else:
                 gt_raw_mask = None
             # time information
-            time_line = time_reader.readline()
+            time_line = time_reader.readline().strip("\n")
             if len(time_line) > 0:
                 ftime = float(time_line) # frame time
             
@@ -322,6 +368,10 @@ def add_raw_mask(frame, raw_mask, im_width, im_height, mask_color):
 
     idx = 0
 
+    # This will convert the mask information in the prediction result file from
+    # running vot evaluate to a mask array.
+    # sub_mask will contain the actual mask, and mask_border contains the border
+    # of the mask.
     for i in range(len(raw_mask)//2):
         idx += raw_mask[2*i]
         if (2*i + 1) <= len(raw_mask):
@@ -350,8 +400,6 @@ def add_raw_mask(frame, raw_mask, im_width, im_height, mask_color):
 
     # fig = plt.figure(figsize=(8, 4.5))
     # plt.imshow(frame)
-
-    # # plt.imshow(mask, cmap=plt.cm.gray)  # use appropriate colormap here
     # plt.show()
 
     return frame
