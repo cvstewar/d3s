@@ -2,6 +2,8 @@
 
 This is a modified version of D3S for a course project in SYDE 673 at the University of Waterloo.
 
+By: Curtis Stewart
+
 ## Installing D3S with the new VOT Python Toolkit
 
 ### Clone the repository
@@ -145,6 +147,15 @@ The `--nocache` flag ensures that it recalculates the analysis results in case `
 
 ```bash
 vot analysis D3SPython --nocache
+```
+
+### Visualizing results
+
+I have created a script to read the output of the `vot evaluate` results and produce annotated images and videos with the tracking predictions. To run on VOT2020, first nagivate to the pytracking folder, then run the vot_mask_vis.py script. Note the assumed file structure mentioned in the file. The resulting visualization will be located in the vot-2020 results folder in a new folder called "visualization" under the tracker.
+
+```bash
+cd pytracking
+python vot_mask_vis.py
 ```
 
 ---

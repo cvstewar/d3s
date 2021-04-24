@@ -374,7 +374,7 @@ def add_raw_mask(frame, raw_mask, im_width, im_height, mask_color):
     # of the mask.
     for i in range(len(raw_mask)//2):
         idx += raw_mask[2*i]
-        if (2*i + 1) <= len(raw_mask):
+        if (2*i + 1) < len(raw_mask):
             sub_mask[idx:idx + raw_mask[2*i+1]] = 1
             mask_border[idx] = 1
             idx += raw_mask[2*i+1]

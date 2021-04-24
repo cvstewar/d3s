@@ -31,10 +31,23 @@ class VOTDatasetClass(BaseDataset):
         start_frame = 1
 
         anno_path = '{}/{}/groundtruth.txt'.format(self.base_path, sequence_name)
-        try:
-            ground_truth_rect = np.loadtxt(str(anno_path), dtype=np.float64)
-        except:
-            ground_truth_rect = np.loadtxt(str(anno_path), delimiter=',', dtype=np.float64)
+
+        gt_file = open(str(anno_path), 'r')
+        gt_lines = gt_file.readlines()
+
+        gt_list = []
+
+        for i in range(len(gt_lines)):
+            bbox = gt_lines[i].strip().split(',')
+            if len(bbox) > 0 and bbox[0][0] == "m":
+                # strip m from start of line
+                bbox[0] = bbox[0][1:]
+            if len(bbox) >= 4:
+                gt_list.append(bbox[:4])
+
+        ground_truth_rect = np.array(gt_list, dtype=np.float64)
+
+        gt_file.close()
 
         end_frame = ground_truth_rect.shape[0]
 
