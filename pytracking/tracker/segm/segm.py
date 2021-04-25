@@ -18,6 +18,7 @@ from ltr import load_network
 
 from pytracking.bbox_fit import fit_bbox_to_mask
 from pytracking.mask_to_disk import save_mask
+from filterpy.kalman import KalmanFilter
 
 
 class Segm(BaseTracker):
@@ -168,6 +169,15 @@ class Segm(BaseTracker):
         toc_ = time.time() - tic
         self.time += toc_
 
+        if self.params.use_Kalman_Filter:
+            # Initialize Kalman_Filter
+            init_state = np.array([copy.copy(self.pos[0].item()), 
+                                   copy.copy(self.pos[1].item()), 
+                                   self.target_scale]).reshape(-1,1)
+            self.kalman_trk = KalmanTracker(init_state, self.params, 
+                copy.copy(self.min_scale_factor.item()), 
+                copy.copy(self.max_scale_factor.item()))
+
     def init_optimization(self, train_x, init_y):
         # Initialize filter
         filter_init_method = getattr(self.params, 'filter_init_method', 'zeros')
@@ -276,8 +286,14 @@ class Segm(BaseTracker):
         # ------- LOCALIZATION ------- #
 
         # Get sample
-        sample_pos = copy.deepcopy(self.pos)
-        sample_scales = self.target_scale * self.params.scale_factors
+        if self.params.use_Kalman_Filter:
+            # Get state prediction
+            pred_state = self.kalman_trk.predict()
+            sample_pos = torch.Tensor(pred_state[:2])
+            sample_scales = pred_state[2] * self.params.scale_factors
+        else:
+            sample_pos = copy.deepcopy(self.pos)
+            sample_scales = self.target_scale * self.params.scale_factors
         test_x = self.extract_processed_sample(im, sample_pos, sample_scales, self.img_sample_sz)
 
         # Compute scores
@@ -326,8 +342,18 @@ class Segm(BaseTracker):
             self.params.use_segmentation and uncert_score < self.params.uncertainty_segment_thr):
             pred_segm_region = self.segment_target(image, new_pos, self.target_sz)
             if pred_segm_region is None:
+                if self.params.use_Kalman_Filter:
+                    # Replace new_pos with updated Kalman filter state in case new pos 
+                    # is used to change self.pos later
+                    new_state = self.kalman_trk.get_state()
+                    new_pos = torch.Tensor(new_state[:2])
                 self.pos = new_pos.clone()
         else:
+            if self.params.use_Kalman_Filter:
+                # Replace new_pos with updated Kalman filter state in case new pos 
+                # is used to change self.pos later
+                new_state = self.kalman_trk.get_state()
+                new_pos = torch.Tensor(new_state[:2])
             self.pos = new_pos.clone()
 
         # ------- UPDATE ------- #
@@ -725,13 +751,28 @@ class Segm(BaseTracker):
     def update_state(self, new_pos, new_scale=None):
         # Update scale
         if new_scale is not None:
-            self.target_scale = new_scale.clamp(self.min_scale_factor, self.max_scale_factor)
-            self.target_sz = self.base_target_sz * self.target_scale
-
+            scale_est = new_scale.clamp(self.min_scale_factor, self.max_scale_factor)
+        else:
+            scale_est = self.target_scale
+            
         # Update pos
         inside_ratio = 0.2
         inside_offset = (inside_ratio - 0.5) * self.target_sz
-        self.pos = torch.max(torch.min(new_pos, self.image_sz - inside_offset), inside_offset)
+        pos_est = torch.max(torch.min(new_pos, self.image_sz - inside_offset), inside_offset)
+
+        if self.params.use_Kalman_Filter:
+            # Update Kalman filter
+            est_state = np.array([copy.copy(pos_est[0].item()), 
+                                  copy.copy(pos_est[1].item()), 
+                                  copy.copy(scale_est.item())]).reshape(-1,1)
+            self.kalman_trk.update(est_state)
+            new_state = self.kalman_trk.get_state()
+            pos_est = torch.Tensor(new_state[:2])
+            scale_est = new_state[2]
+
+        self.target_scale = scale_est
+        self.target_sz = self.base_target_sz * self.target_scale
+        self.pos = pos_est
 
     def create_dist(self, width, height, cx=None, cy=None):
 
@@ -1043,6 +1084,12 @@ class Segm(BaseTracker):
                                                     min(self.target_scale * self.params.max_scale_change_factor,
                                                         new_target_scale))
 
+                            # Update scale in Kalman filter
+                            if self.params.use_Kalman_Filter:
+                                new_scale = copy.copy(self.target_scale.item())
+                                self.kalman_trk.set_scale(new_scale)
+
+
             if not self.params.segm_scale_estimation or pixels_ratio < self.params.consider_segm_pixels_ratio:
                 self.pos[0] = np.mean(prbox[:, 1])
                 self.pos[1] = np.mean(prbox[:, 0])
@@ -1139,3 +1186,86 @@ class Segm(BaseTracker):
             return self.result_mask
         else:
             return None
+
+class KalmanTracker(object):
+    """
+    This class is for storing and predicting the state of the target box for use
+    when picking the search region.
+
+    The state vector is (x,y,s,xdot,ydot,sdot), where x,y is the center
+    position of the bbox and s is the scale.
+
+    This is adapted from SORT tracker by Alex Bewley:
+
+    A. Bewley, Z. Ge, L. Ott, F. Ramos, and B. Upcroft, “Simple online and 
+    realtime tracking,” in Proceedings - International Conference on Image 
+    Processing, ICIP, Feb. 2016, vol. 2016-Augus, pp. 3464–3468, 
+    doi: 10.1109/ICIP.2016.7533003.
+    """
+
+    def __init__(self,init_state,params,min_scale_factor,max_scale_factor):
+        """
+        Initialize tracker using initial bbox.
+        """
+        # Create kalman filter with state of dim 6, and measurment vector of dim 3
+        self.kf = KalmanFilter(dim_x=6, dim_z=3)
+        # State transition matrix
+        self.kf.F = np.array([[1,0,0,1,0,0],
+                              [0,1,0,0,1,0],
+                              [0,0,1,0,0,1],
+                              [0,0,0,1,0,0],
+                              [0,0,0,0,1,0],
+                              [0,0,0,0,0,1]])
+        # Measurement function
+        self.kf.H = np.array([[1,0,0,0,0,0],
+                              [0,1,0,0,0,0],
+                              [0,0,1,0,0,0]])
+
+        # The below variables are adapted from the SORT tracker by Alex Bewley
+        # Measurement uncertainty/noise
+        self.kf.R[2:,2:] *= 10.
+        # Covariance matrix
+        # give high uncertainty to the unobservable initial velocities
+        # P contains np.eye(dim_x) be default
+        self.kf.P[3:,3:] *= 1000. 
+        self.kf.P *= 10.
+        # Process uncertainty/noise
+        # Q contains np.eye(dim_x) be default
+        self.kf.Q[-1,-1] *= 0.01
+        self.kf.Q[3:,3:] *= 0.01
+        # Set initial state
+        self.kf.x[:3] = init_state
+        self.min_scale_factor = min_scale_factor
+        self.max_scale_factor = max_scale_factor
+
+        self.params = params
+
+    def update(self,state):
+        """
+        Updates the state vector with observed state.
+        """
+        self.kf.update(state)
+
+    def predict(self):
+        """
+        Return the predicted state.
+        """
+        # Check if predicted scale would be within limits
+        est_scale_factor = self.kf.x[2] + self.kf.x[5]
+        if est_scale_factor > self.max_scale_factor:
+            self.kf.x[5] = self.max_scale_factor - self.kf.x[2]
+        elif est_scale_factor < self.min_scale_factor:
+            self.kf.x[5] = self.min_scale_factor - self.kf.x[2]
+        # Advance the state vector
+        self.kf.predict()
+        return self.kf.x[:3,0]
+
+    def get_state(self):
+        """
+        Returns the current state.
+        """
+        return self.kf.x[:3,0]
+
+    def set_scale(self, scale):
+        # Allow overriding scale based on segmentation prediction
+        self.kf.x[2] = scale

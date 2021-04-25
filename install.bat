@@ -72,6 +72,11 @@ call pip install jpeg4py
 
 echo.
 echo.
+echo ****************** Installing filterypy 1.4.5 ******************
+call pip install filterpy==1.4.5
+
+echo.
+echo.
 echo ****************** Preparing directory for networks ******************
 mkdir pytracking\networks
 

@@ -1,4 +1,4 @@
-# Modified D3S for SYDE 673
+# Modified D3S with Kalman Filter for SYDE 673
 
 This is a modified version of D3S for a course project in SYDE 673 at the University of Waterloo.
 

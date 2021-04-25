@@ -99,8 +99,8 @@ def parameters():
     params.segm_use_dist = True
     params.segm_normalize_mean = [0.485, 0.456, 0.406]
     params.segm_normalize_std = [0.229, 0.224, 0.225]
-    params.segm_search_area_factor = 4.0
-    params.segm_feature_sz = 24
+    params.segm_search_area_factor = 2.0
+    params.segm_feature_sz = 12
     params.segm_output_sz = params.segm_feature_sz * 16
     params.segm_scale_estimation = True
     params.segm_optimize_polygon = True
@@ -131,5 +131,8 @@ def parameters():
 
     # This will enable retrieving the mask for VOT2020
     params.return_mask = False
+
+    # Controls to use Kalman Filter
+    params.use_Kalman_Filter = True
 
     return params
