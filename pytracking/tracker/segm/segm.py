@@ -345,18 +345,8 @@ class Segm(BaseTracker):
             self.params.use_segmentation and uncert_score < self.params.uncertainty_segment_thr):
             pred_segm_region = self.segment_target(image, new_pos, self.target_sz)
             if pred_segm_region is None:
-                if self.params.use_Kalman_Filter and self.params.Kalman_Filter_output:
-                    # Replace new_pos with updated Kalman filter state in case new pos 
-                    # is used to change self.pos later
-                    new_state = self.kalman_trk.get_state()
-                    new_pos = torch.Tensor(new_state[:2])
                 self.pos = new_pos.clone()
         else:
-            if self.params.use_Kalman_Filter and self.params.Kalman_Filter_output:
-                # Replace new_pos with updated Kalman filter state in case new pos 
-                # is used to change self.pos later
-                new_state = self.kalman_trk.get_state()
-                new_pos = torch.Tensor(new_state[:2])
             self.pos = new_pos.clone()
 
         # ------- UPDATE ------- #
@@ -383,6 +373,23 @@ class Segm(BaseTracker):
             self.filter_optimizer.run(self.params.hard_negative_CG_iter)
         elif (self.frame_num - 1) % self.params.train_skipping == 0:
             self.filter_optimizer.run(self.params.CG_iter)
+
+        # Update Kalman filter
+        if self.params.use_Kalman_Filter:
+            est_state = np.array([copy.copy(self.pos[0].item()), 
+                                copy.copy(self.pos[1].item()), 
+                                copy.copy(self.target_scale.item())]).reshape(-1,1)
+            self.kalman_trk.update(est_state)
+
+            # For debugging:
+            # self.kalman_trk.set_state(est_state)
+
+            if self.params.Kalman_Filter_output:
+                # Use Kalman filter to control estimated state
+                new_state = self.kalman_trk.get_state()
+                self.pos = torch.Tensor(new_state[:2])
+                self.target_scale = torch.Tensor([new_state[2]])
+                self.target_sz = self.base_target_sz * self.target_scale
 
         if self.params.use_segmentation:
             if pred_segm_region is not None:
@@ -763,17 +770,17 @@ class Segm(BaseTracker):
         inside_offset = (inside_ratio - 0.5) * self.target_sz
         pos_est = torch.max(torch.min(new_pos, self.image_sz - inside_offset), inside_offset)
 
-        if self.params.use_Kalman_Filter and not self.params.segm_scale_estimation:
-            # Update Kalman filter
-            est_state = np.array([copy.copy(pos_est[0].item()), 
-                                  copy.copy(pos_est[1].item()), 
-                                  copy.copy(scale_est.item())]).reshape(-1,1)
-            self.kalman_trk.update(est_state)
-            if self.params.Kalman_Filter_output:
-                # Use Kalman filter to control estimated state
-                new_state = self.kalman_trk.get_state()
-                pos_est = torch.Tensor(new_state[:2])
-                scale_est = new_state[2]
+        # if self.params.use_Kalman_Filter and not self.params.segm_scale_estimation:
+        #     # Update Kalman filter
+        #     est_state = np.array([copy.copy(pos_est[0].item()), 
+        #                           copy.copy(pos_est[1].item()), 
+        #                           copy.copy(scale_est.item())]).reshape(-1,1)
+        #     self.kalman_trk.update(est_state)
+        #     if self.params.Kalman_Filter_output:
+        #         # Use Kalman filter to control estimated state
+        #         new_state = self.kalman_trk.get_state()
+        #         pos_est = torch.Tensor(new_state[:2])
+        #         scale_est = torch.Tensor([new_state[2]])
 
         self.target_scale = scale_est
         self.target_sz = self.base_target_sz * self.target_scale
@@ -1097,12 +1104,23 @@ class Segm(BaseTracker):
                 self.pos[1] = np.mean(prbox[:, 0])
                 state_updated = True
 
-            # Update Kalman filter
-            if self.params.use_Kalman_Filter and state_updated:
-                est_state = np.array([copy.copy(self.pos[0].item()), 
-                                    copy.copy(self.pos[1].item()), 
-                                    copy.copy(self.target_scale.item())]).reshape(-1,1)
-                self.kalman_trk.update(est_state)
+            # # Update Kalman filter
+            # if self.params.use_Kalman_Filter and state_updated:
+            #     # self.pos[0] = np.mean(prbox[:, 1])
+            #     # self.pos[1] = np.mean(prbox[:, 0])
+            #     est_state = np.array([copy.copy(self.pos[0].item()), 
+            #                         copy.copy(self.pos[1].item()), 
+            #                         copy.copy(self.target_scale.item())]).reshape(-1,1)
+            #     self.kalman_trk.update(est_state)
+
+            #     self.kalman_trk.set_state(est_state)
+
+            #     if self.params.Kalman_Filter_output:
+            #         # Use Kalman filter to control estimated state
+            #         new_state = self.kalman_trk.get_state()
+            #         self.pos = torch.Tensor(new_state[:2])
+            #         self.target_scale = torch.Tensor([new_state[2]])
+            #         self.target_sz = self.base_target_sz * self.target_scale
 
             if not self.params.segm_scale_estimation or pixels_ratio < self.params.segm_pixels_ratio:
                 if prbox_opt.size > 0:
@@ -1279,3 +1297,8 @@ class KalmanTracker(object):
     def set_scale(self, scale):
         # Allow overriding scale based on segmentation prediction
         self.kf.x[2] = scale
+    
+    def set_state(self, state):
+        # For debugging, will override current state
+        self.kf.x[:3] = state
+        self.kf.x[3:] = 0

@@ -134,7 +134,11 @@ def parameters():
 
     # Controls to use Kalman Filter
     params.use_Kalman_Filter = True
-    params.Kalman_Filter_output = False
-    params.search_with_Kalman_scale = True
+    params.Kalman_Filter_output = True # controls whether after Kalman update
+    # from the tracker detection prediction the estimated state will be used to 
+    # override the D3S state and prediction
+    params.search_with_Kalman_scale = True # controls whether the search region
+    # utilizes the predicted Kalman scale. If false, only the predicted center
+    # location is used for the search region, and scale comes from last frame.
 
     return params
